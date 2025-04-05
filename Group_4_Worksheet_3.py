@@ -103,7 +103,9 @@ def Section_1():
 
         for i in range(nPart):
 
-            partInd = int((i + 1) * f0 / (fs / nFFT)) # (i+1) because when i=0, we get f0 and i=1 we get first partial i.e. 2f0 and so on...
+            partInd = int(
+                (i + 1) * f0 / (fs / nFFT)
+            )  # (i+1) because when i=0, we get f0 and i=1 we get first partial i.e. 2f0 and so on...
 
             if (partInd - maxRange > 0) & (partInd + maxRange <= len(Fabs)):
 
@@ -112,36 +114,106 @@ def Section_1():
                     partInd
                     + np.argmax(Fabs[partInd - maxRange : partInd + maxRange + 1])
                     - maxRange
-                ) * (fs / nFFT) # np.argmax finds the exact bin within the search window that has the maximum amplitude.
+                ) * (
+                    fs / nFFT
+                )  # np.argmax finds the exact bin within the search window that has the maximum amplitude.
 
                 A[n, i] = a
                 F[n, i] = f
 
+    "(1.3) Analysis Report"
+
     plt.figure(figsize=(10, 5))
     plt.plot(F)
     plt.ylim([0, 5000])
-    plt.xlabel('Frame Number')
-    plt.ylabel('Frequency (Hz)')
-    plt.title('Partial Frequencies Over Time')
-    plt.legend([f'Partial {i+1}' for i in range(F.shape[1])], loc='upper right')
+    plt.xlabel("Frame Number")
+    plt.ylabel("Frequency (Hz)")
+    plt.title("Partial Frequencies Over Time")
+    plt.legend([f"Partial {i+1}" for i in range(F.shape[1])], loc="upper right")
     plt.grid(True)
     plt.show()
 
     # Plot amplitudes
     plt.figure(figsize=(10, 5))
     plt.plot(A)
-    plt.xlabel('Frame Number')
-    plt.ylabel('Amplitude')
-    plt.title('Partial Amplitudes Over Time')
-    plt.legend([f'Partial {i+1}' for i in range(A.shape[1])], loc='upper right')
+    plt.xlabel("Frame Number")
+    plt.ylabel("Amplitude")
+    plt.title("Partial Amplitudes Over Time")
+    plt.legend([f"Partial {i+1}" for i in range(A.shape[1])], loc="upper right")
     plt.grid(True)
     plt.show()
-    
-    np.savetxt('partial_frequencies.sms', F)
-    np.savetxt('partial_amplitudes.sms', A)
+
+    np.savetxt("partial_frequencies.sms", F)
+    np.savetxt("partial_amplitudes.sms", A)
 
     # write analysis parameters
-    np.savetxt('params.sms', [fs, nHop])
+    np.savetxt("params.sms", [fs, nHop])
+
+    "(1.4) Synthesis Code + (1.5) Re-Synthesis"
+
+    # Added class Oscillators for creating osc banks and resynthesis - file name - oscillators.py
+
+    from oscillators import Oscillator, AdditiveResynthesizer
+
+    params_file = "params.sms"
+    params = np.loadtxt(params_file)
+    sample_rate = int(params[0])
+    hop_size = int(params[1])
+    print(
+        f"Loaded parameters: sample_rate={sample_rate}Hz, hop_size={hop_size} samples"
+    )
+
+    synth = AdditiveResynthesizer(sample_rate, hop_size)
+
+    freq_file = "partial_frequencies.sms"
+    amp_file = "partial_amplitudes.sms"
+    synth.load_analysis_data(freq_file, amp_file)
+
+    output_audio = synth.synthesize()
+
+    output_file = "resynthesized.wav"
+    wavfile.write(output_file, sample_rate, output_audio.astype(np.float32))
+
+    plt.figure(figsize=(10, 4))
+    plot_length = min(10000, len(output_audio))
+    plt.plot(output_audio[:plot_length])
+    plt.title("Resynthesized Waveform (First Section)")
+    plt.xlabel("Sample")
+    plt.ylabel("Amplitude")
+    plt.grid(True)
+    plt.savefig("resynthesized_waveform.png")
+    plt.show()
+
+    # For plotting spectrum of the OG and resynthesized files
+
+    def plot_spectrogram_stft(
+        filename, nperseg=1024, noverlap=512, cmap="viridis"
+    ):  # Quick STFT Plot def from Claude
+        fs, x = wavfile.read(filename)
+
+        # If stereo, convert to mono
+        if x.ndim > 1:
+            x = x[:, 0]
+
+        # Normalize
+        x = x / np.max(np.abs(x))
+
+        f, t, Zxx = stft(x, fs=fs, window="hann", nperseg=nperseg, noverlap=noverlap)
+
+        Zxx_db = 20 * np.log10(np.abs(Zxx) + 1e-8)
+
+        # Plot the spectrogram in dB
+        plt.figure(figsize=(12, 6))
+        plt.pcolormesh(t, f, Zxx_db, shading="gouraud", cmap=cmap)
+        plt.title(f"STFT Magnitude Spectrogram (dB): {filename}")
+        plt.ylabel("Frequency (Hz)")
+        plt.xlabel("Time (sec)")
+        plt.colorbar(label="Magnitude (dB)")
+        plt.tight_layout()
+        plt.show()
+
+    plot_spectrogram_stft("clarinet_D4_phrase_mezzo-forte_tongued-slur.wav")
+    plot_spectrogram_stft("resynthesized.wav")
 
 
 Section_1()  # FOR CALLING THE RESULTS OF SECTION 1
